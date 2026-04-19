@@ -1,1 +1,11 @@
 **/*.mp4
+**/*.mkv
+**/*.mp3
+**/*.m4a
+**/*.srt
+.venv/
+__pycache__/
+*.egg-info/
+dist/
+build/
+CLAUDE.md

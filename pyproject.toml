@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "streamgui"
+version = "0.1.0"
+description = "A Python/Tkinter GUI for merging audio, video, and subtitle streams from multiple files using ffmpeg, with per-stream metadata and sync offsets."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+keywords = ["ffmpeg", "media", "streams", "gui", "tkinter", "mux"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Environment :: X11 Applications",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "static-ffmpeg",
+]
+
+[project.scripts]
+streamgui = "streamgui.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/jonathanclase/ffmpeg-stream-GUI"
+"Bug Tracker" = "https://github.com/jonathanclase/ffmpeg-stream-GUI/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["streamgui"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "assets/",
+    "*.mkv",
+    "*.mp4",
+    "*.mp3",
+    "*.m4a",
+    "*.srt",
+]
