@@ -1,9 +1,33 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from dataclasses import dataclass
-import os
+import os, platform, shutil, subprocess
 
 from streamgui.probe import probe_streams
+
+_KDIALOG: str | None = shutil.which("kdialog")
+_ZENITY: str | None = shutil.which("zenity")
+
+_MEDIA_FILTER_KD = (
+    "*.mkv *.mp4 *.m4v *.avi *.mov *.ts *.m2ts *.mts *.webm *.wmv *.flv "
+    "*.mp3 *.aac *.flac *.ogg *.wav *.m4a *.opus *.ac3 *.dts "
+    "*.srt *.ass *.ssa *.sub *.sup|Media files\n"
+    "*.mkv *.mp4 *.m4v *.avi *.mov *.ts *.m2ts *.mts *.webm *.wmv *.flv|Video\n"
+    "*.mp3 *.aac *.flac *.ogg *.wav *.m4a *.opus *.ac3 *.dts|Audio\n"
+    "*.srt *.ass *.ssa *.sub *.sup|Subtitles\n"
+    "*|All files"
+)
+
+_MEDIA_FILETYPES_TK: list[tuple[str, str]] = [
+    ("Media files", "*.mkv *.mp4 *.m4v *.avi *.mov *.ts *.m2ts *.mts *.webm *.wmv *.flv "
+                    "*.mp3 *.aac *.flac *.ogg *.wav *.m4a *.opus *.ac3 *.dts "
+                    "*.srt *.ass *.ssa *.sub *.sup"),
+    ("Video",       "*.mkv *.mp4 *.m4v *.avi *.mov *.ts *.m2ts *.mts *.webm *.wmv *.flv"),
+    ("Audio",       "*.mp3 *.aac *.flac *.ogg *.wav *.m4a *.opus *.ac3 *.dts"),
+    ("Subtitles",   "*.srt *.ass *.ssa *.sub *.sup"),
+    ("All files",   "*"),
+]
+
 
 @dataclass
 class StreamEntry:
@@ -74,13 +98,26 @@ def compute_input_map(included: list[StreamEntry]) -> dict[tuple[str, str], int]
             seen[key] = len(seen)
     return seen
 
+def get_line_continuation() -> str:
+    """Return the appropriate line-continuation character based on what the OS can handle
 
-def build_command(included: list[StreamEntry], quick_test: bool) -> str:
+    Returns:
+        The appropriate separate a multi-part command (str)
+    """
+    os_name = platform.system()
+    if os_name.lower() == 'windows':
+        return " "
+    return " \\\n    "
+
+def build_command(included: list[StreamEntry], quick_test: bool,
+                  output_title: str, overwrite: bool) -> str:
     """Build the ffmpeg shell command string for the given checked stream entries.
 
     Args:
         included: Checked StreamEntry objects in display order (list[StreamEntry]).
         quick_test: If True, appends -to 15:00 to limit output to 15 minutes (bool).
+        output_title: Base name for the output file, without extension (str).
+        overwrite: If True, prepends -y to overwrite the output file without prompting (bool).
 
     Returns:
         The full command as a backslash-continued multi-line string, or '' if included
@@ -102,7 +139,7 @@ def build_command(included: list[StreamEntry], quick_test: bool) -> str:
     maps = ""
     for entry in included:
         key = (entry.path, entry.offset.strip())
-        maps += f"-map {seen[key]}:{entry.stream.get('index', 0)} "
+        maps += f" -map {seen[key]}:{entry.stream.get('index', 0)}"
     parts.append(maps)
     parts.append("-c copy")
 
@@ -117,9 +154,12 @@ def build_command(included: list[StreamEntry], quick_test: bool) -> str:
 
     if quick_test:
         parts.append("-to 15:00")
-    parts.append('"output.mkv"')
+    name = output_title.strip() or "output.mkv"
+    if overwrite:
+        parts.append("-y")
+    parts.append(f'"{name}"')
 
-    return " \\\n  ".join(parts)
+    return get_line_continuation().join(parts)
 
 
 class _SashLock:
@@ -181,6 +221,7 @@ class App(tk.Tk):
         self.title("ffmpeg Stream Mapper")
         self.geometry("1000x800")
 
+        self._last_dir: str = os.path.expanduser("~")
         self._loaded_paths: set[str] = set()
         self._stream_items: dict[str, StreamEntry] = {}
         self._current_item: str | None = None
@@ -188,6 +229,10 @@ class App(tk.Tk):
         self._drag_hover: str | None = None
         self._quickTest = tk.BooleanVar()
         self._quickTest.set(True)
+        self._outputTitle = tk.StringVar()
+        self._outputTitle.set("output.mkv")
+        self._outputOverwrite = tk.BooleanVar()
+        self._outputOverwrite.set(True)
 
         self._create_toolbar()
         self._create_main_pane()
@@ -309,7 +354,7 @@ class App(tk.Tk):
         offset_var.trace_add("write", self._on_offset_write)
 
     def _create_middle_panel(self, parent: tk.PanedWindow) -> None:
-        """Build the command bar with Copy button and quick-test checkbox and add it to parent.
+        """Build the command bar with Copy button, quick-test checkbox, and output options.
 
         Args:
             parent: The PanedWindow to add this panel to (tk.PanedWindow).
@@ -323,6 +368,13 @@ class App(tk.Tk):
         tk.Label(row, text="FFmpeg Command", font=("", 10, "bold")).pack(side=tk.LEFT)
         tk.Checkbutton(
             row, text="Fifteen-minute test", variable=self._quickTest, command=self._update_command).pack(side=tk.LEFT, padx=25)
+        tk.Checkbutton(
+            row, text="Overwrite?", variable=self._outputOverwrite,
+            command=self._update_command).pack(side=tk.RIGHT, padx=25)
+        outputName = tk.Entry(row, textvariable=self._outputTitle, width=30, )
+        outputName.pack(side=tk.RIGHT)
+        tk.Label(row, text="Output Title:").pack(side=tk.RIGHT, padx=2)
+        self._outputTitle.trace_add("write", self._update_command)
 
     def _create_bottom_pane(self, parent: tk.PanedWindow) -> None:
         """Build the scrollable command text output pane and add it to parent.
@@ -349,11 +401,55 @@ class App(tk.Tk):
         scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
         self._cmd_text.pack(fill=tk.BOTH, expand=True, padx=4, pady=(0, 4))
 
+    def _pick_files(self) -> tuple[str, ...]:
+        """Open a native file chooser and return selected paths.
+
+        Prefers kdialog (KDE) or zenity (GNOME/GTK) via subprocess when available;
+        falls back to tkinter's filedialog on other desktops or platforms.
+
+        Returns:
+            A tuple of absolute file paths, or an empty tuple if cancelled
+            (tuple[str, ...]).
+        """
+        if _KDIALOG:
+            result = subprocess.run(
+                [_KDIALOG, "--title", "Select Media Files",
+                 "--getopenfilename", self._last_dir, _MEDIA_FILTER_KD,
+                 "--multiple", "--separate-output"],
+                capture_output=True, text=True,
+            )
+            if result.returncode != 0:
+                return ()
+            return tuple(p for p in result.stdout.strip().split("\n") if p)
+
+        if _ZENITY:
+            result = subprocess.run(
+                [_ZENITY, "--file-selection", "--multiple",
+                 "--title=Select Media Files",
+                 f"--filename={self._last_dir}/",
+                 "--separator=\n",
+                 "--file-filter=Media files | *.mkv *.mp4 *.m4v *.avi *.mov *.ts "
+                 "*.m2ts *.mts *.webm *.wmv *.flv *.mp3 *.aac *.flac *.ogg *.wav "
+                 "*.m4a *.opus *.ac3 *.dts *.srt *.ass *.ssa *.sub *.sup",
+                 "--file-filter=All files | *"],
+                capture_output=True, text=True,
+            )
+            if result.returncode != 0:
+                return ()
+            return tuple(p for p in result.stdout.strip().split("\n") if p)
+
+        return filedialog.askopenfilenames(
+            title="Select Media Files",
+            initialdir=self._last_dir,
+            filetypes=_MEDIA_FILETYPES_TK,
+        )
+
     def _open_file(self) -> None:
         """Open a file dialog, probe selected files, and add their streams to the treeview."""
-        paths = filedialog.askopenfilenames()
+        paths = self._pick_files()
         if not paths:
             return
+        self._last_dir = os.path.dirname(paths[0])
         for path in paths:
             if path in self._loaded_paths:
                 continue
@@ -613,7 +709,10 @@ class App(tk.Tk):
         """
         included = [self._stream_items[iid] for iid in self._get_ordered_ids()
                     if self._stream_items[iid].checked]
-        cmd = build_command(included, self._quickTest.get())
+        cmd = build_command(
+            included, self._quickTest.get(),
+            self._outputTitle.get(), self._outputOverwrite.get()
+        )
         self._cmd_text.config(state=tk.NORMAL)
         self._cmd_text.delete("1.0", tk.END)
         if cmd:
@@ -639,6 +738,8 @@ class App(tk.Tk):
         self._drag_item = None
         self._drag_hover = None
         self._quickTest.set(True)
+        self._outputTitle.set("output.mkv")
+        self._outputOverwrite.set(True)
         for item in self._treeview.get_children():
             self._treeview.delete(item)
         self._clear_info()

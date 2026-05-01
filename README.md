@@ -138,32 +138,40 @@ Upon first launch, `static-ffmpeg` will download the ffmpeg/ffprobe binaries for
 
 ***Goal:** To create a tool that allows for merging of multiple files, including foreign language audio, subtitle(s), commentary audio, and reaction tracks, into a single output file, with configurable parameters to ensure alignment and metadata for the tracks*
 
+#### 🟪 ${\color{purple}\textsf{Completed}}$
+- ~~Disallow multi-line commands if not supported by the host OS~~
+    - ~~Goal: Improve the cross-platform compatibility of the **tool**~~
+- ~~Explore the viability of using a better file selector~~
+    - ~~Goal: Improve the ability to work with **multiple files**~~
+- ~~Add outpit file naming~~
+- ~~Goal: Add title parameter for the **output file** as a **configurable parameter**~~
+
 #### 🟩 ${\color{green}\textsf{Now}}$
 
-- Disallow multi-line commands if not supported by the OS
-    - Use `platform` to determine the OS
-    - Confirm OS-level compatibility with multi-line commands
-    - Build a method to return the appropriate command part join character
-    - Call the method from `build_command`
+- Add metadata options for the output file
+    - Goal: Supplement the **configurable parameters** for the **output file**
+    - Add a new state variable for the outputTitle
+    - Create a UI Entry for the title
+    - Add a title parameter to the build_command method
+    - Add the logic for the output title to the build_entry method
+    - Update the _update_command method_
+    - Define what other attributes might be needed
 
 #### 🟦 ${\color{blue}\textsf{Next}}$
 
-- Add outpit file naming
-    - Add a title Entry
-    - Consider adding a checkbox for an overwrite flag
 - Explore a mechanism to limit language drop-downs
+    - Goal: Improve usability of the **configurable parameters** for the **foreign language audio** values
     - Determine where to store and maintain language settings
     - Determine the default set of languages to include
     - Create a UI for maintaining the language options
     - Keep all UI elements in sync when changes are made
 
+
 #### 🟧 ${\color{orange}\textsf{Later}}$
 
-- Add metadata to the output file
-    - Explore whether an output-specific section is needed for other attributes
-    - Define what other attributes might be needed
 - Explore the viability of adding drag-and-drop functionality from the file system
-- Explore the viability of using a better file selector
+    - Goal: Improve the ability to work with **multiple files**
+
 ---
 
 ## License
