@@ -599,7 +599,7 @@ class App(tk.Tk):
         if target == self._drag_hover:
             return
         if self._drag_hover:
-            self._treeview.item(self._drag_hover, tags=())
+            self._restore_tag(self._drag_hover)
         self._drag_hover = target if (target and target != self._drag_item) else None
         if self._drag_hover:
             self._treeview.item(self._drag_hover, tags=("drop_target",))
@@ -614,7 +614,7 @@ class App(tk.Tk):
         if src_id is None:
             return
         if self._drag_hover:
-            self._treeview.item(self._drag_hover, tags=())
+            self._restore_tag(self._drag_hover)
         self._drag_item = None
         self._drag_hover = None
         target = self._treeview.identify_row(event.y)
@@ -685,6 +685,27 @@ class App(tk.Tk):
         return [iid for file_item in self._treeview.get_children()
                 for iid in self._treeview.get_children(file_item)]
 
+    def _restore_tag(self, iid: str) -> None:
+        """Set an item's tags from its checked state, dropping any transient tag.
+
+        No-ops for file container nodes, which have no checked state of their own.
+
+        Args:
+            iid: Treeview item ID of the item to restore (str).
+        """
+        entry = self._stream_items.get(iid)
+        self._treeview.item(iid, tags=() if entry is None or entry.checked else ("excluded",))
+
+    def _refresh_tags(self) -> None:
+        """Reapply the 'excluded' tag to every stream item based on its checked state.
+
+        # NOTE: Several operations (drag reorder rebuild, drop-target highlight
+        # clearing) overwrite an item's tags wholesale, silently dropping the
+        # 'excluded' strikethrough tag. Call this after any such operation.
+        """
+        for iid in self._get_ordered_ids():
+            self._restore_tag(iid)
+
     def _refresh_stream_labels(self) -> None:
         """Update the treeview label text for every stream item using the current input indices."""
         for iid in self._get_ordered_ids():
@@ -722,6 +743,7 @@ class App(tk.Tk):
     def _refresh(self) -> None:
         """Recalculate variables and rebuild the command output."""
         self._refresh_state()
+        self._refresh_tags()
         self._update_command()
 
     def _copy_command(self) -> None:

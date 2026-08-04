@@ -108,6 +108,32 @@ cd ffmpeg-stream-GUI
 pip install .
 ```
 
+#### Upgrading
+
+Run one of the following:
+
+```bash
+pipx install --force git+https://github.com/jonathanclase/ffmpeg-stream-GUI.git
+```
+
+```bash
+pip install --force-reinstall git+https://github.com/jonathanclase/ffmpeg-stream-GUI.git
+```
+
+Or from a local clone:
+
+```bash
+git clone https://github.com/jonathanclase/ffmpeg-stream-GUI.git
+cd ffmpeg-stream-GUI
+pipx install --force .
+```
+
+```bash
+git clone https://github.com/jonathanclase/ffmpeg-stream-GUI.git
+cd ffmpeg-stream-GUI
+pip install --force-reinstall .
+```
+
 #### Uninstalling
 
 Run `pipx uninstall streamgui` or `pip uninstall streamgui`
@@ -145,6 +171,7 @@ Upon first launch, `static-ffmpeg` will download the ffmpeg/ffprobe binaries for
     - ~~Goal: Improve the ability to work with **multiple files**~~
 - ~~Add outpit file naming~~
 - ~~Goal: Add title parameter for the **output file** as a **configurable parameter**~~
+- ~~Fixed issue with strikethrough on unchecked streams to improve visibility of **configurable parameters**~~
 
 #### 🟩 ${\color{green}\textsf{Now}}$
 
