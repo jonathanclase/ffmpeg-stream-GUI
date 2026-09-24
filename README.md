@@ -175,6 +175,8 @@ Upon first launch, `static-ffmpeg` will download the ffmpeg/ffprobe binaries for
 
 #### 🟩 ${\color{green}\textsf{Now}}$
 
+- Change the default sizing for the top frame
+    - Goal: Fix an issue with visibility of the **configurable paramters**
 - Add metadata options for the output file
     - Goal: Supplement the **configurable parameters** for the **output file**
     - Add a new state variable for the outputTitle
@@ -196,6 +198,8 @@ Upon first launch, `static-ffmpeg` will download the ffmpeg/ffprobe binaries for
 
 #### 🟧 ${\color{orange}\textsf{Later}}$
 
+- Handle scenarios where existing metadata is set to blank
+    - Goal: Improve actual use of **configurable parameters**
 - Explore the viability of adding drag-and-drop functionality from the file system
     - Goal: Improve the ability to work with **multiple files**
 
