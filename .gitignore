@@ -4,6 +4,7 @@
 **/*.m4a
 **/*.srt
 .venv/
+.vscode/*
 __pycache__/
 *.egg-info/
 dist/

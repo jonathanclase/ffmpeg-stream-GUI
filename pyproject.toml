@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "streamgui"
-version = "0.2.1"
+dynamic = ["version"]
 description = "A Python/Tkinter GUI for merging audio, video, and subtitle streams from multiple files using ffmpeg, with per-stream metadata and sync offsets."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -34,6 +34,11 @@ streamgui = "streamgui.__main__:main"
 [project.urls]
 Homepage = "https://github.com/jonathanclase/ffmpeg-stream-GUI"
 "Bug Tracker" = "https://github.com/jonathanclase/ffmpeg-stream-GUI/issues"
+
+# NOTE: the version is defined once, in streamgui/__init__.py, so the package
+# metadata and the runtime __version__ can never drift apart.
+[tool.hatch.version]
+path = "streamgui/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["streamgui"]

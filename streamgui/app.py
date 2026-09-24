@@ -28,6 +28,10 @@ _MEDIA_FILETYPES_TK: list[tuple[str, str]] = [
     ("All files",   "*"),
 ]
 
+_CONTAINER_IID: str = "container"
+_STREAM_DETAIL_LABELS: tuple[str, ...] = ("File", "Index", "Type", "Codec", "Duration")
+_CONTAINER_DETAIL_LABELS: tuple[str, ...] = ("Output", "Inputs", "Format", "Streams", "Duration")
+
 
 @dataclass
 class StreamEntry:
@@ -38,8 +42,10 @@ class StreamEntry:
     fmt: dict
     checked: bool = True
     offset: str = "0.0"
-    title: str = ""
-    lang: str = ""
+    # NOTE: None means "unedited, keep the source tag"; "" is a deliberate blank that
+    # must still be emitted when the source tag is populated.
+    title: str | None = None
+    lang: str | None = None
     input_idx: int | None = None
 
 
@@ -110,7 +116,9 @@ def get_line_continuation() -> str:
     return " \\\n    "
 
 def build_command(included: list[StreamEntry], quick_test: bool,
-                  output_title: str, overwrite: bool) -> str:
+                  output_title: str, overwrite: bool,
+                  container_title: str | None = None,
+                  container_lang: str | None = None) -> str:
     """Build the ffmpeg shell command string for the given checked stream entries.
 
     Args:
@@ -118,6 +126,10 @@ def build_command(included: list[StreamEntry], quick_test: bool,
         quick_test: If True, appends -to 15:00 to limit output to 15 minutes (bool).
         output_title: Base name for the output file, without extension (str).
         overwrite: If True, prepends -y to overwrite the output file without prompting (bool).
+        container_title: Global title metadata for the output file, '' to blank it, or
+            None to keep the first input's (str | None).
+        container_lang: Global language metadata for the output file, '' to blank it, or
+            None to keep the first input's (str | None).
 
     Returns:
         The full command as a backslash-continued multi-line string, or '' if included
@@ -145,12 +157,18 @@ def build_command(included: list[StreamEntry], quick_test: bool,
 
     for out_idx, entry in enumerate(included):
         tags = entry.stream.get("tags", {})
-        title = entry.title or tags.get("title", "")
-        lang = entry.lang or tags.get("language", "")
-        if title != tags.get("title", ""):
-            parts.append(f'-metadata:s:{out_idx} title="{title}"')
-        if lang != tags.get("language", ""):
-            parts.append(f'-metadata:s:{out_idx} language="{lang}"')
+        if entry.title is not None and entry.title != tags.get("title", ""):
+            parts.append(f'-metadata:s:{out_idx} title="{entry.title}"')
+        if entry.lang is not None and entry.lang != tags.get("language", ""):
+            parts.append(f'-metadata:s:{out_idx} language="{entry.lang}"')
+
+    # NOTE: ffmpeg copies global metadata from input 0 by default, so container
+    # tags are only emitted when they differ from the first input's format tags.
+    fmt_tags = included[0].fmt.get("tags", {})
+    if container_title is not None and container_title != fmt_tags.get("title", ""):
+        parts.append(f'-metadata title="{container_title}"')
+    if container_lang is not None and container_lang != fmt_tags.get("language", ""):
+        parts.append(f'-metadata language="{container_lang}"')
 
     if quick_test:
         parts.append("-to 15:00")
@@ -233,6 +251,9 @@ class App(tk.Tk):
         self._outputTitle.set("output.mkv")
         self._outputOverwrite = tk.BooleanVar()
         self._outputOverwrite.set(True)
+        # NOTE: None means "follow the first input's format tags"; '' blanks them
+        self._containerTitle: str | None = None
+        self._containerLang: str | None = None
 
         self._create_toolbar()
         self._create_main_pane()
@@ -251,7 +272,7 @@ class App(tk.Tk):
         self._outer.pack(fill=tk.BOTH, expand=True)
 
         top = tk.PanedWindow(self._outer, orient=tk.HORIZONTAL, sashrelief=tk.RAISED, sashwidth=5)
-        self._outer.add(top, minsize=300)
+        self._outer.add(top, minsize=320)
         self._create_left_pane(top)
         self._create_right_pane(top)
 
@@ -280,6 +301,7 @@ class App(tk.Tk):
         self._treeview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self._treeview.tag_configure("drop_target", background="lightblue")
         self._treeview.tag_configure("excluded", foreground="gray", font=("TkDefaultFont", 9, "overstrike"))
+        self._treeview.insert("", tk.END, iid=_CONTAINER_IID, text="Container", open=True)
         self._treeview.bind("<<TreeviewSelect>>", self._on_select)
         # self._treeview.bind("<KeyPress-Delete>", self._on_delete)
             # NOTE: Commented out for now, as there is no simple way to re-add a stream deleted inadvertently
@@ -300,11 +322,15 @@ class App(tk.Tk):
         tk.Label(frame, text="Stream Details", font=("", 10, "bold")).pack(anchor=tk.W, padx=8, pady=(8, 4))
 
         self._vars: dict[str, tk.StringVar] = {}
+        # NOTE: row captions are swapped to _CONTAINER_DETAIL_LABELS when the Container
+        # node is selected; self._vars stays keyed by the stream captions.
+        self._detail_labels: dict[str, tk.Label] = {}
         for label in ("File", "Index", "Type", "Codec"):
             self._vars[label] = tk.StringVar()
             row = tk.Frame(frame)
             row.pack(fill=tk.X, padx=5, pady=1)
-            tk.Label(row, text=f"{label}:", width=10, anchor=tk.W).pack(side=tk.LEFT)
+            self._detail_labels[label] = tk.Label(row, text=f"{label}:", width=10, anchor=tk.W)
+            self._detail_labels[label].pack(side=tk.LEFT)
             tk.Label(row, textvariable=self._vars[label], anchor=tk.W, wraplength=600, justify=tk.LEFT).pack(
                 side=tk.LEFT, fill=tk.X, expand=True
             )
@@ -312,7 +338,8 @@ class App(tk.Tk):
         self._vars["Duration"] = tk.StringVar()
         row = tk.Frame(frame)
         row.pack(fill=tk.X, padx=5, pady=2)
-        tk.Label(row, text="Duration:", width=10, anchor=tk.W).pack(side=tk.LEFT)
+        self._detail_labels["Duration"] = tk.Label(row, text="Duration:", width=10, anchor=tk.W)
+        self._detail_labels["Duration"].pack(side=tk.LEFT)
         tk.Label(row, textvariable=self._vars["Duration"], anchor=tk.W).pack(side=tk.LEFT)
 
         ttk.Separator(frame, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=8, pady=(8, 4))
@@ -460,7 +487,7 @@ class App(tk.Tk):
                 continue
             self._loaded_paths.add(path)
             name = os.path.basename(path)
-            file_item = self._treeview.insert("", tk.END, text=name, open=True)
+            file_item = self._treeview.insert(_CONTAINER_IID, tk.END, text=name, open=True)
             for stream in streams:
                 item_id = self._treeview.insert(file_item, tk.END, text=stream_label(stream))
                 self._stream_items[item_id] = StreamEntry(path=path, stream=stream, fmt=fmt)
@@ -491,6 +518,7 @@ class App(tk.Tk):
         """Reset the detail panel to its empty, disabled state."""
         # NOTE: must come first — guards trace callbacks that check self._current_item
         self._current_item = None
+        self._set_detail_labels(_STREAM_DETAIL_LABELS)
         for var in self._vars.values():
             var.set("")
         for var, widget in self._edit_fields.values():
@@ -503,30 +531,66 @@ class App(tk.Tk):
         Args:
             *_: Tkinter trace callback arguments (ignored) (object).
         """
-        if self._current_item is not None:
+        if self._current_item in self._stream_items:
             self._stream_items[self._current_item].offset = self._edit_fields["offset"][0].get()
             self._refresh()
             self._load_stream_vars(self._stream_items[self._current_item])
 
     def _on_title_write(self, *_: object) -> None:
-        """Write the edited title value back to the current stream entry and update the command.
+        """Write the edited title value back to the current stream or Container and update the command.
 
         Args:
             *_: Tkinter trace callback arguments (ignored) (object).
         """
-        if self._current_item is not None:
+        if self._current_item == _CONTAINER_IID:
+            self._containerTitle = self._edit_fields["title"][0].get()
+            self._update_command()
+        elif self._current_item is not None:
             self._stream_items[self._current_item].title = self._edit_fields["title"][0].get()
             self._update_command()
 
     def _on_lang_write(self, *_: object) -> None:
-        """Write the edited language value back to the current stream entry and update the command.
+        """Write the edited language value back to the current stream or Container and update the command.
 
         Args:
             *_: Tkinter trace callback arguments (ignored) (object).
         """
-        if self._current_item is not None:
+        if self._current_item == _CONTAINER_IID:
+            self._containerLang = self._edit_fields["lang"][0].get()
+            self._update_command()
+        elif self._current_item is not None:
             self._stream_items[self._current_item].lang = self._edit_fields["lang"][0].get()
             self._update_command()
+
+    def _set_detail_labels(self, captions: tuple[str, ...]) -> None:
+        """Relabel the read-only detail rows, in _STREAM_DETAIL_LABELS order.
+
+        Args:
+            captions: One caption per detail row (tuple[str, ...]).
+        """
+        for key, caption in zip(_STREAM_DETAIL_LABELS, captions):
+            self._detail_labels[key].config(text=f"{caption}:")
+
+    def _container_tags(self) -> dict:
+        """Return the format tags of the first included input, which ffmpeg copies by default.
+
+        Returns:
+            The first included entry's ffprobe format tags, or {} if none are included (dict).
+        """
+        included = self._get_included()
+        return included[0].fmt.get("tags", {}) if included else {}
+
+    def _load_container_vars(self) -> None:
+        """Populate the read-only detail fields with a summary of the output container."""
+        included = self._get_included()
+        fmt = included[0].fmt if included else {}
+        name = self._outputTitle.get().strip() or "output.mkv"
+        self._set_detail_labels(_CONTAINER_DETAIL_LABELS)
+        self._vars["File"].set(name)
+        self._vars["Index"].set(f"{len(compute_input_map(included)):d}")
+        self._vars["Type"].set(os.path.splitext(name)[1].lstrip(".").upper())
+        self._vars["Codec"].set(f"{len(included):d}")
+        self._vars["Duration"].set(_fmt_duration(fmt.get("duration")))
 
     def _load_stream_vars(self, entry: StreamEntry) -> None:
         """Populate the read-only detail fields from a StreamEntry.
@@ -536,6 +600,7 @@ class App(tk.Tk):
         """
         stream, fmt = entry.stream, entry.fmt
         duration = stream.get("duration") or fmt.get("duration")
+        self._set_detail_labels(_STREAM_DETAIL_LABELS)
         self._vars["File"].set(entry.path)
         self._vars["Index"].set(f"{entry.input_idx} : {stream.get('index', '')}")
         self._vars["Type"].set(stream.get("codec_type", ""))
@@ -549,6 +614,9 @@ class App(tk.Tk):
             _event: The Tkinter treeview selection event (unused) (tk.Event).
         """
         sel = self._treeview.selection()
+        if sel and sel[0] == _CONTAINER_IID:
+            self._select_container()
+            return
         if not sel or sel[0] not in self._stream_items:
             self._clear_info()
             return
@@ -561,16 +629,37 @@ class App(tk.Tk):
 
         self._load_stream_vars(entry)
 
-        self._edit_fields["lang"][0].set(entry.lang or tags.get("language", ""))
-        self._edit_fields["title"][0].set(entry.title or tags.get("title", ""))
+        self._edit_fields["lang"][0].set(
+            entry.lang if entry.lang is not None else tags.get("language", ""))
+        self._edit_fields["title"][0].set(
+            entry.title if entry.title is not None else tags.get("title", ""))
         self._edit_fields["offset"][0].set(entry.offset)
         self._edit_fields["check"][0].set(entry.checked)
         for _, widget in self._edit_fields.values():
             widget.config(state=tk.NORMAL)
 
+    def _select_container(self) -> None:
+        """Populate the detail panel for the Container node, enabling only Language and Title."""
+        # NOTE: clear first so the traces fired while prefilling neither write into the
+        # previously selected stream nor pin the Container to the current defaults.
+        self._current_item = None
+        tags = self._container_tags()
+        self._load_container_vars()
+        self._edit_fields["lang"][0].set(
+            self._containerLang if self._containerLang is not None
+            else tags.get("language", ""))
+        self._edit_fields["title"][0].set(
+            self._containerTitle if self._containerTitle is not None
+            else tags.get("title", ""))
+        self._edit_fields["offset"][0].set("")
+        self._edit_fields["check"][0].set(False)
+        for key, (_, widget) in self._edit_fields.items():
+            widget.config(state=tk.NORMAL if key in ("lang", "title") else tk.DISABLED)
+        self._current_item = _CONTAINER_IID
+
     def _on_check(self) -> None:
         """Toggle the checked state of the current stream entry and refresh the display."""
-        if self._current_item is not None:
+        if self._current_item in self._stream_items:
             included = self._edit_fields["check"][0].get()
             self._stream_items[self._current_item].checked = included
             tag = () if included else ("excluded",)
@@ -617,12 +706,11 @@ class App(tk.Tk):
             self._restore_tag(self._drag_hover)
         self._drag_item = None
         self._drag_hover = None
-        target = self._treeview.identify_row(event.y)
-        if not target:
-            roots = self._treeview.get_children()
-            if roots:
-                first_bbox = self._treeview.bbox(roots[0])
-                target = roots[0] if (first_bbox and event.y < first_bbox[1]) else None
+        # NOTE: empty space and the Container node both mean "move to the end"; the
+        # Container is always the first row, so nothing can be dropped above it.
+        target = self._treeview.identify_row(event.y) or None
+        if target == _CONTAINER_IID:
+            target = None
         if target != src_id:
             self._reorder_stream(src_id, target)
 
@@ -661,7 +749,7 @@ class App(tk.Tk):
             ordered_ids: Stream item IDs in the desired display order (list[str]).
         """
         sel = self._treeview.selection()
-        for item in self._treeview.get_children():
+        for item in self._treeview.get_children(_CONTAINER_IID):
             self._treeview.delete(item)
         prev_path = None
         file_node: str | None = None
@@ -669,7 +757,7 @@ class App(tk.Tk):
             entry = self._stream_items[item_id]
             path, stream = entry.path, entry.stream
             if path != prev_path:
-                file_node = self._treeview.insert("", tk.END, text=os.path.basename(path), open=True)
+                file_node = self._treeview.insert(_CONTAINER_IID, tk.END, text=os.path.basename(path), open=True)
                 prev_path = path
             self._treeview.insert(file_node, tk.END, text=stream_label(stream, entry.input_idx), iid=item_id)
         if sel and sel[0] in self._stream_items:
@@ -682,8 +770,17 @@ class App(tk.Tk):
         Returns:
             A flat list of stream item IDs ordered as they appear in the treeview (list[str]).
         """
-        return [iid for file_item in self._treeview.get_children()
+        return [iid for file_item in self._treeview.get_children(_CONTAINER_IID)
                 for iid in self._treeview.get_children(file_item)]
+
+    def _get_included(self) -> list[StreamEntry]:
+        """Return the checked stream entries in their current treeview display order.
+
+        Returns:
+            Checked StreamEntry objects in display order (list[StreamEntry]).
+        """
+        return [self._stream_items[iid] for iid in self._get_ordered_ids()
+                if self._stream_items[iid].checked]
 
     def _restore_tag(self, iid: str) -> None:
         """Set an item's tags from its checked state, dropping any transient tag.
@@ -728,17 +825,18 @@ class App(tk.Tk):
         Args:
             *_: Optional Tkinter trace callback arguments (ignored) (object).
         """
-        included = [self._stream_items[iid] for iid in self._get_ordered_ids()
-                    if self._stream_items[iid].checked]
         cmd = build_command(
-            included, self._quickTest.get(),
-            self._outputTitle.get(), self._outputOverwrite.get()
+            self._get_included(), self._quickTest.get(),
+            self._outputTitle.get(), self._outputOverwrite.get(),
+            self._containerTitle, self._containerLang
         )
         self._cmd_text.config(state=tk.NORMAL)
         self._cmd_text.delete("1.0", tk.END)
         if cmd:
             self._cmd_text.insert("1.0", cmd)
         self._cmd_text.config(state=tk.DISABLED)
+        if self._current_item == _CONTAINER_IID:
+            self._load_container_vars()
 
     def _refresh(self) -> None:
         """Recalculate variables and rebuild the command output."""
@@ -755,6 +853,9 @@ class App(tk.Tk):
 
     def _clear_all(self) -> None:
         """Reset the application to its initial empty state."""
+        # NOTE: delete rows first — resetting _outputTitle fires a trace that walks the tree
+        for item in self._treeview.get_children(_CONTAINER_IID):
+            self._treeview.delete(item)
         self._loaded_paths.clear()
         self._stream_items.clear()
         self._drag_item = None
@@ -762,8 +863,8 @@ class App(tk.Tk):
         self._quickTest.set(True)
         self._outputTitle.set("output.mkv")
         self._outputOverwrite.set(True)
-        for item in self._treeview.get_children():
-            self._treeview.delete(item)
+        self._containerTitle = None
+        self._containerLang = None
         self._clear_info()
         self._update_command()
 
@@ -771,6 +872,6 @@ class App(tk.Tk):
         """Reset all stream offsets to 0.0 and refresh the display."""
         for entry in self._stream_items.values():
             entry.offset = "0.0"
-        if self._current_item is not None:
+        if self._current_item in self._stream_items:
             self._edit_fields["offset"][0].set("0.0")
         self._refresh()

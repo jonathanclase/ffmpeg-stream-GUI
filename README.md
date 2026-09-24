@@ -172,22 +172,14 @@ Upon first launch, `static-ffmpeg` will download the ffmpeg/ffprobe binaries for
 - ~~Add outpit file naming~~
 - ~~Goal: Add title parameter for the **output file** as a **configurable parameter**~~
 - ~~Fixed issue with strikethrough on unchecked streams to improve visibility of **configurable parameters**~~
+- ~~Change the default sizing for the top frame to fix an issue with visibility of the **configurable paramters**~~
+- ~~Added Container title and language metadata as **configurable parameters** for the **output file**~~
+- ~~Handle scenarios where existing metadata is set to blank~~
 
 #### 🟩 ${\color{green}\textsf{Now}}$
 
-- Change the default sizing for the top frame
-    - Goal: Fix an issue with visibility of the **configurable paramters**
-- Add metadata options for the output file
-    - Goal: Supplement the **configurable parameters** for the **output file**
-    - Add a new state variable for the outputTitle
-    - Create a UI Entry for the title
-    - Add a title parameter to the build_command method
-    - Add the logic for the output title to the build_entry method
-    - Update the _update_command method_
-    - Define what other attributes might be needed
 
 #### 🟦 ${\color{blue}\textsf{Next}}$
-
 - Explore a mechanism to limit language drop-downs
     - Goal: Improve usability of the **configurable parameters** for the **foreign language audio** values
     - Determine where to store and maintain language settings
@@ -195,11 +187,8 @@ Upon first launch, `static-ffmpeg` will download the ffmpeg/ffprobe binaries for
     - Create a UI for maintaining the language options
     - Keep all UI elements in sync when changes are made
 
-
 #### 🟧 ${\color{orange}\textsf{Later}}$
 
-- Handle scenarios where existing metadata is set to blank
-    - Goal: Improve actual use of **configurable parameters**
 - Explore the viability of adding drag-and-drop functionality from the file system
     - Goal: Improve the ability to work with **multiple files**
 
