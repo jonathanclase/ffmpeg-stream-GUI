@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from collections.abc import Callable
 from dataclasses import dataclass
 import os, platform, shutil, subprocess
 
@@ -27,6 +28,11 @@ _MEDIA_FILETYPES_TK: list[tuple[str, str]] = [
     ("Subtitles",   "*.srt *.ass *.ssa *.sub *.sup"),
     ("All files",   "*"),
 ]
+
+# NOTE: macOS users expect Command-based shortcuts; everywhere else uses Control
+_IS_MAC: bool = platform.system() == "Darwin"
+_SHORTCUT_MODIFIER: str = "Command" if _IS_MAC else "Control"
+_SHORTCUT_LABEL: str = "⌘" if _IS_MAC else "Ctrl+"
 
 _CONTAINER_IID: str = "container"
 _STREAM_DETAIL_LABELS: tuple[str, ...] = ("File", "Index", "Type", "Codec", "Duration")
@@ -259,12 +265,30 @@ class App(tk.Tk):
         self._create_main_pane()
 
     def _create_toolbar(self) -> None:
-        """Build and pack the top toolbar with Open, Clear, and Reset buttons."""
+        """Build and pack the top toolbar with Open, Clear, and Reset buttons and their shortcuts."""
         toolbar = tk.Frame(self, bd=1)
         toolbar.pack(side=tk.TOP, fill=tk.X)
-        tk.Button(toolbar, text="Open File", command=self._open_file).pack(side=tk.LEFT, padx=1, pady=1)
-        tk.Button(toolbar, text="Clear All", command=self._clear_all).pack(side=tk.LEFT, padx=3, pady=1)
-        tk.Button(toolbar, text="Reset Offsets", command=self._reset_offsets).pack(side=tk.LEFT, padx=3, pady=1)
+        buttons = (
+            ("Open File", "o", self._open_file, 1),
+            ("Clear All", "l", self._clear_all, 3),
+            ("Reset Offsets", "r", self._reset_offsets, 3),
+        )
+        for text, key, command, padx in buttons:
+            label = f"{text} ({_SHORTCUT_LABEL}{key.upper()})"
+            tk.Button(toolbar, text=label, command=command).pack(side=tk.LEFT, padx=padx, pady=1)
+            self._bind_shortcut(key, command)
+
+    def _bind_shortcut(self, key: str, command: Callable[[], None]) -> None:
+        """Bind a modifier+key shortcut on the root window to a command.
+
+        Args:
+            key: The lowercase letter to combine with the platform modifier (str).
+            command: The zero-argument callback to run when pressed (Callable[[], None]).
+        """
+        # NOTE: bound on the root so it fires from any child widget; the uppercase
+        # variant covers Caps Lock, which otherwise changes the keysym
+        for keysym in (key.lower(), key.upper()):
+            self.bind(f"<{_SHORTCUT_MODIFIER}-{keysym}>", lambda e: command())
 
     def _create_main_pane(self) -> None:
         """Build the outer PanedWindow containing the stream panes, command bar, and output text."""
@@ -852,7 +876,9 @@ class App(tk.Tk):
             self.clipboard_append(cmd)
 
     def _clear_all(self) -> None:
-        """Reset the application to its initial empty state."""
+        """Reset the application to its initial empty state after user confirmation."""
+        if not messagebox.askyesno("Clear All", "Remove all loaded files and reset settings?", parent=self):
+            return
         # NOTE: delete rows first — resetting _outputTitle fires a trace that walks the tree
         for item in self._treeview.get_children(_CONTAINER_IID):
             self._treeview.delete(item)

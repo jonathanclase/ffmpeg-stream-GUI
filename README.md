@@ -175,6 +175,7 @@ Upon first launch, `static-ffmpeg` will download the ffmpeg/ffprobe binaries for
 - ~~Change the default sizing for the top frame to fix an issue with visibility of the **configurable paramters**~~
 - ~~Added Container title and language metadata as **configurable parameters** for the **output file**~~
 - ~~Handle scenarios where existing metadata is set to blank~~
+- ~~Added keyboard shortcuts for menu buttons to improve **tool** usability~~
 
 #### 🟩 ${\color{green}\textsf{Now}}$
 
