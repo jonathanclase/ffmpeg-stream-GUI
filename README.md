@@ -176,22 +176,17 @@ Upon first launch, `static-ffmpeg` will download the ffmpeg/ffprobe binaries for
 - ~~Added Container title and language metadata as **configurable parameters** for the **output file**~~
 - ~~Handle scenarios where existing metadata is set to blank~~
 - ~~Added keyboard shortcuts for menu buttons to improve **tool** usability~~
+- ~~Explore a mechanism to limit language drop-downs to improve usability of the **configurable parameters** for the **foreign language audio** values~~
 
 #### 🟩 ${\color{green}\textsf{Now}}$
 
 
 #### 🟦 ${\color{blue}\textsf{Next}}$
-- Explore a mechanism to limit language drop-downs
-    - Goal: Improve usability of the **configurable parameters** for the **foreign language audio** values
-    - Determine where to store and maintain language settings
-    - Determine the default set of languages to include
-    - Create a UI for maintaining the language options
-    - Keep all UI elements in sync when changes are made
+- Explore the viability of adding drag-and-drop functionality from the file system
+    - Goal: Improve the ability to work with **multiple files**
 
 #### 🟧 ${\color{orange}\textsf{Later}}$
 
-- Explore the viability of adding drag-and-drop functionality from the file system
-    - Goal: Improve the ability to work with **multiple files**
 
 ---
 

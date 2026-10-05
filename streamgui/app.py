@@ -380,8 +380,12 @@ class App(tk.Tk):
         row.pack(fill=tk.X, padx=8, pady=2)
         tk.Label(row, text="Language:", width=10, anchor=tk.W).pack(side=tk.LEFT)
         lang_var = tk.StringVar()
-        lang_entry = tk.Entry(row, width=3, textvariable=lang_var, state=tk.DISABLED)
-        lang_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        # NOTE: "key" validation only screens typed/pasted edits; lang_var.set() bypasses it,
+        # so longer source tags still display unchanged.
+        lang_entry = tk.Entry(
+            row, width=5, textvariable=lang_var, state=tk.DISABLED,
+            validate="key", validatecommand=(self.register(lambda proposed: len(proposed) <= 3), "%P"))
+        lang_entry.pack(side=tk.LEFT, fill=tk.X, expand=False)
         self._edit_fields["lang"] = (lang_var, lang_entry)
 
         row = tk.Frame(frame)
