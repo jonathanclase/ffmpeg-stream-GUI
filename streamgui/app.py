@@ -48,6 +48,7 @@ class StreamEntry:
     fmt: dict
     checked: bool = True
     offset: str = "0.0"
+    offset_metadata: bool = True
     # NOTE: None means "unedited, keep the source tag"; "" is a deliberate blank that
     # must still be emitted when the source tag is populated.
     title: str | None = None
@@ -158,7 +159,7 @@ def build_command(included: list[StreamEntry], quick_test: bool,
     for entry in included:
         key = (entry.path, entry.offset.strip())
         maps += f" -map {seen[key]}:{entry.stream.get('index', 0)}"
-    parts.append(maps)
+    parts.append(maps.lstrip())
     parts.append("-c copy")
 
     for out_idx, entry in enumerate(included):
@@ -167,6 +168,12 @@ def build_command(included: list[StreamEntry], quick_test: bool,
             parts.append(f'-metadata:s:{out_idx} title="{entry.title}"')
         if entry.lang is not None and entry.lang != tags.get("language", ""):
             parts.append(f'-metadata:s:{out_idx} language="{entry.lang}"')
+        o = entry.offset.strip()
+        # NOTE: Offsets may be plain seconds or ffmpeg durations (HH:MM:SS.ms), so zero is
+        # detected textually: anything made only of zeros, colons and dots is no offset.
+        if entry.offset_metadata and o and not all(c in "0:." for c in o.lstrip("+-")):
+            sign = "" if o[0] in "+-" else "+"
+            parts.append(f'-metadata:s:{out_idx} itsoffset="{sign}{o}"')
 
     # NOTE: ffmpeg copies global metadata from input 0 by default, so container
     # tags are only emitted when they differ from the first input's format tags.
@@ -181,6 +188,7 @@ def build_command(included: list[StreamEntry], quick_test: bool,
     name = output_title.strip() or "output.mkv"
     if overwrite:
         parts.append("-y")
+    parts.append("-hide_banner -loglevel quiet -stats")
     parts.append(f'"{name}"')
 
     return get_line_continuation().join(parts)
@@ -403,6 +411,12 @@ class App(tk.Tk):
         offset_entry = tk.Entry(row, textvariable=offset_var, state=tk.DISABLED, width=12)
         offset_entry.pack(side=tk.LEFT)
         self._edit_fields["offset"] = (offset_var, offset_entry)
+        offset_meta_var = tk.BooleanVar()
+        offset_meta_checkbox = tk.Checkbutton(
+            row, text="Add metadata?", variable=offset_meta_var,
+            command=self._on_offset_metadata_check, state=tk.DISABLED)
+        offset_meta_checkbox.pack(side=tk.LEFT, padx=8)
+        self._edit_fields["offset_meta"] = (offset_meta_var, offset_meta_checkbox)
 
         lang_var.trace_add("write", self._on_lang_write)
         title_var.trace_add("write", self._on_title_write)
@@ -564,6 +578,13 @@ class App(tk.Tk):
             self._refresh()
             self._load_stream_vars(self._stream_items[self._current_item])
 
+    def _on_offset_metadata_check(self) -> None:
+        """Toggle whether the current stream's offset is written as itsoffset metadata."""
+        if self._current_item in self._stream_items:
+            self._stream_items[self._current_item].offset_metadata = (
+                self._edit_fields["offset_meta"][0].get())
+            self._update_command()
+
     def _on_title_write(self, *_: object) -> None:
         """Write the edited title value back to the current stream or Container and update the command.
 
@@ -662,6 +683,7 @@ class App(tk.Tk):
         self._edit_fields["title"][0].set(
             entry.title if entry.title is not None else tags.get("title", ""))
         self._edit_fields["offset"][0].set(entry.offset)
+        self._edit_fields["offset_meta"][0].set(entry.offset_metadata)
         self._edit_fields["check"][0].set(entry.checked)
         for _, widget in self._edit_fields.values():
             widget.config(state=tk.NORMAL)
@@ -680,6 +702,7 @@ class App(tk.Tk):
             self._containerTitle if self._containerTitle is not None
             else tags.get("title", ""))
         self._edit_fields["offset"][0].set("")
+        self._edit_fields["offset_meta"][0].set(False)
         self._edit_fields["check"][0].set(False)
         for key, (_, widget) in self._edit_fields.items():
             widget.config(state=tk.NORMAL if key in ("lang", "title") else tk.DISABLED)

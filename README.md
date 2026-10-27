@@ -177,6 +177,7 @@ Upon first launch, `static-ffmpeg` will download the ffmpeg/ffprobe binaries for
 - ~~Handle scenarios where existing metadata is set to blank~~
 - ~~Added keyboard shortcuts for menu buttons to improve **tool** usability~~
 - ~~Explore a mechanism to limit language drop-downs to improve usability of the **configurable parameters** for the **foreign language audio** values~~
+- ~~Added an optional `itsoffset` stream metadata tag so that **configurable parameters** used for alignment are recorded in the **output file**~~
 
 #### 🟩 ${\color{green}\textsf{Now}}$
 

@@ -45,6 +45,7 @@ The editable properties of each stream include:
 - The **Language** entry box, which allows you to set the metadata language tag for the stream in the output. The value is set to the original value of the stream, if it exists
 - The **Title** entry box, which allows you to set the title language tag for the stream in the output. The value is set to the original value of the stream, if it exists
 - The **Offset** entry box, which allows you to set the `itsoffset` attribute of the stream in the output. If two streams in the same file need different offsets, the file path is duplicated automatically with a separate offset value. The default value is set to 0.0
+- The **Add metadata?** checkbox, to the right of **Offset**, which writes the offset value into the output stream's metadata as an `itsoffset` tag (`-metadata:s:{index} itsoffset={offset}`). This is checked by default
 
 ![Stream Details - Include Streams](../assets/006.png)
 
