@@ -269,8 +269,37 @@ class App(tk.Tk):
         self._containerTitle: str | None = None
         self._containerLang: str | None = None
 
+        self._bind_paste_replaces_selection()
         self._create_toolbar()
         self._create_main_pane()
+
+    def _bind_paste_replaces_selection(self) -> None:
+        """Make pasting into any Entry replace its selected text, on every platform."""
+        # NOTE: Tk's stock Entry <<Paste>> binding deliberately skips deleting the
+        # selection on X11, so pasted text is inserted beside the highlight instead
+        # of over it. Overriding the class binding fixes every Entry at once.
+        def paste(event: tk.Event) -> str:
+            """Replace the widget's selection (if any) with the clipboard contents.
+
+            Args:
+                event: The <<Paste>> virtual event (tk.Event).
+
+            Returns:
+                "break" to stop Tk's default paste handler from also running (str).
+            """
+            widget = event.widget
+            try:
+                text = widget.clipboard_get()
+            except tk.TclError:
+                return "break"
+            if widget.selection_present():
+                widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
+            widget.insert(tk.INSERT, text)
+            # NOTE: Tk's own helper, which the stock binding also calls, to keep the cursor visible
+            widget.tk.call("tk::EntrySeeInsert", widget)
+            return "break"
+
+        self.bind_class("Entry", "<<Paste>>", paste)
 
     def _create_toolbar(self) -> None:
         """Build and pack the top toolbar with Open, Clear, and Reset buttons and their shortcuts."""
